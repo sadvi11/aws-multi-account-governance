@@ -1,0 +1,89 @@
+name: CI
+
+# Everything here runs free, on GitHub-hosted runners, with no AWS account.
+#
+# That matters for this repository in particular: an AWS Organization cannot be
+# stood up disposably in CI - creating one requires a real management account,
+# and member accounts need payment methods. So the verification has to happen
+# against the policy documents and the Terraform, and this file is explicit
+# about which of the two it is doing.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policies:
+    name: Verify the Service Control Policies
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - run: pip install pytest
+
+      # These are the assertions that matter. An SCP is accepted by AWS if it
+      # parses, whether or not it means what was intended - so "it deployed"
+      # proves very little on its own.
+      - name: Assert the policies mean what they claim
+        run: python -m pytest tests/ -v
+
+      - name: Report policy sizes against the AWS limit
+        run: |
+          python3 - <<'PY'
+          import glob, json, os
+          LIMIT = 5120
+          print(f"{'policy':38} {'chars':>6}  {'limit':>6}")
+          print("-" * 54)
+          for f in sorted(glob.glob("policies/*.json")):
+              size = len(json.dumps(json.load(open(f)), separators=(",", ":")))
+              pct = size / LIMIT
+              flag = "  <-- close to limit" if pct > 0.8 else ""
+              print(f"{os.path.basename(f):38} {size:6}  {LIMIT:6}{flag}")
+          PY
+
+  terraform:
+    name: Terraform format and validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+
+      - name: Format check
+        run: terraform -chdir=terraform fmt -check -recursive
+
+      # No plan here, deliberately. Planning aws_organizations_* resources
+      # requires a real management account - the provider calls Organizations
+      # APIs that have no offline equivalent. validate is the honest ceiling
+      # for what can be checked without one, and the README says so rather
+      # than implying more.
+      - name: Validate
+        run: |
+          terraform -chdir=terraform init -backend=false -input=false
+          terraform -chdir=terraform validate
+
+      - name: Confirm Terraform and the tests read the same files
+        run: |
+          # The policy documents are referenced by Terraform via file() and
+          # loaded directly by the tests. If those ever diverge, the tested
+          # artifact stops being the deployed artifact.
+          missing=0
+          for f in policies/*.json; do
+            name=$(basename "$f")
+            grep -q "$name" terraform/scp.tf || { echo "::error::$name is not referenced by terraform/scp.tf"; missing=1; }
+          done
+          for name in $(grep -oE '[a-z-]+\.json' terraform/scp.tf | sort -u); do
+            [ -f "policies/$name" ] || { echo "::error::terraform references policies/$name which does not exist"; missing=1; }
+          done
+          [ "$missing" = "0" ] && echo "every policy file is referenced, and every reference resolves"
+          exit $missing

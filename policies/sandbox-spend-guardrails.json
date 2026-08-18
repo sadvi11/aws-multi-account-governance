@@ -1,0 +1,36 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "DenyExpensiveInstanceTypes",
+      "Effect": "Deny",
+      "Action": [
+        "ec2:RunInstances"
+      ],
+      "Resource": "arn:aws:ec2:*:*:instance/*",
+      "Condition": {
+        "StringNotLike": {
+          "ec2:InstanceType": [
+            "t2.*",
+            "t3.*",
+            "t3a.*",
+            "t4g.*"
+          ]
+        }
+      }
+    },
+    {
+      "Sid": "DenyExpensiveServices",
+      "Effect": "Deny",
+      "Action": [
+        "redshift:CreateCluster",
+        "sagemaker:CreateEndpoint",
+        "sagemaker:CreateNotebookInstance",
+        "elasticmapreduce:RunJobFlow",
+        "directconnect:*",
+        "outposts:*"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
