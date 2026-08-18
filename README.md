@@ -2,13 +2,20 @@
 
 [![CI](https://github.com/sadvi11/aws-multi-account-governance/actions/workflows/ci.yml/badge.svg)](https://github.com/sadvi11/aws-multi-account-governance/actions/workflows/ci.yml)
 ![Terraform](https://img.shields.io/badge/Terraform-1.9-7B42BC?logo=terraform&logoColor=white)
-![SCPs](https://img.shields.io/badge/SCPs-6%20policies%2C%2031%20assertions-FF9900?logo=amazonaws&logoColor=white)
+![SCPs](https://img.shields.io/badge/SCPs-6%20policies-FF9900?logo=amazonaws&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-44%2C%20fault--injected-2088ff)
 ![Residency](https://img.shields.io/badge/Data%20residency-Canada--only-3ecca0)
 ![License](https://img.shields.io/badge/License-MIT-green)
 
 An AWS Organization defined in Terraform — organizational units, six Service
-Control Policies, and **31 tests asserting those policies actually do what they
-claim.**
+Control Policies, an IAM permission boundary for safe delegation, and **44 tests
+asserting those controls actually do what they claim.**
+
+Built for the Canadian market: data residency is enforced by policy rather than
+convention, and [docs/CANADIAN-COMPLIANCE.md](docs/CANADIAN-COMPLIANCE.md)
+explains which regulations actually drive that — PIPEDA, provincial FIPPA and
+health legislation, and OSFI B-13 for federally regulated financial
+institutions.
 
 ---
 
@@ -132,6 +139,52 @@ Two faults injected into the policies:
 
 Each fault failed exactly its own test and nothing else. **A check that cannot
 fail is worse than no check**, because it produces confidence without coverage.
+
+---
+
+## Permission boundaries — safe delegation
+
+The control people most often misunderstand:
+
+> **effective permissions = identity policy AND boundary**
+
+A boundary does **not** grant anything. It sets a ceiling. Attach one allowing
+`s3:*` to a principal whose identity policy allows nothing, and it still allows
+nothing.
+
+**Why it matters:** developers legitimately need to create IAM roles — Lambda
+execution roles, ECS task roles. But without a boundary, *"can create roles"* is
+equivalent to *"is an administrator"*: create a role with `AdministratorAccess`,
+assume it, done.
+
+The boundary closes that. A developer may create roles — but **only roles
+carrying the same boundary**, enforced by an `iam:PermissionsBoundary`
+condition. Nothing they create can exceed what they have.
+
+Three bypasses are closed explicitly, and each has a test:
+
+| Bypass | Closed by |
+|---|---|
+| Create a role with no boundary | `iam:CreateRole` requires the `iam:PermissionsBoundary` condition |
+| Attach the boundary, then detach it | `iam:DeleteRolePermissionsBoundary` denied |
+| Leave it attached, rewrite what it says | `iam:CreatePolicyVersion`, `iam:SetDefaultPolicyVersion` denied |
+
+That third one is the subtle one. The boundary stays attached and every role
+still references the same ARN — only its contents changed.
+
+**And it still permits real work.** There is a test asserting `ec2:*`, `s3:*`,
+`lambda:*`, `dynamodb:*` and `logs:*` remain available, because a boundary that
+blocks everything is not a boundary, it is an outage.
+
+### Boundary vs SCP
+
+Layers, not alternatives:
+
+- An **SCP** bounds an entire **account** and cannot be changed from inside it
+- A **boundary** bounds a **principal** and is managed within the account
+
+The SCP stops a whole account leaving Canada. The boundary stops one developer
+escalating inside it.
 
 ---
 

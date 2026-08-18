@@ -1,0 +1,107 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "AllowDevelopmentServices",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:*",
+        "ecs:*",
+        "eks:Describe*",
+        "eks:List*",
+        "s3:*",
+        "dynamodb:*",
+        "lambda:*",
+        "logs:*",
+        "cloudwatch:*",
+        "sqs:*",
+        "sns:*",
+        "states:*",
+        "apigateway:*",
+        "rds:*",
+        "secretsmanager:GetSecretValue",
+        "ssm:GetParameter*",
+        "kms:Decrypt",
+        "kms:GenerateDataKey"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowReadOnlyIAM",
+      "Effect": "Allow",
+      "Action": [
+        "iam:Get*",
+        "iam:List*",
+        "iam:SimulatePrincipalPolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "AllowRoleCreationOnlyWithThisBoundary",
+      "Effect": "Allow",
+      "Action": [
+        "iam:CreateRole",
+        "iam:PutRolePolicy",
+        "iam:AttachRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:DetachRolePolicy"
+      ],
+      "Resource": "arn:aws:iam::*:role/app/*",
+      "Condition": {
+        "StringEquals": {
+          "iam:PermissionsBoundary": "arn:aws:iam::*:policy/DeveloperPermissionBoundary"
+        }
+      }
+    },
+    {
+      "Sid": "DenyBoundaryModification",
+      "Effect": "Deny",
+      "Action": [
+        "iam:DeleteRolePermissionsBoundary",
+        "iam:DeleteUserPermissionsBoundary",
+        "iam:CreatePolicyVersion",
+        "iam:DeletePolicyVersion",
+        "iam:SetDefaultPolicyVersion"
+      ],
+      "Resource": "arn:aws:iam::*:policy/DeveloperPermissionBoundary"
+    },
+    {
+      "Sid": "DenyPrivilegeEscalationViaIAM",
+      "Effect": "Deny",
+      "Action": [
+        "iam:CreateUser",
+        "iam:CreateAccessKey",
+        "iam:CreateLoginProfile",
+        "iam:UpdateLoginProfile",
+        "iam:AttachUserPolicy",
+        "iam:PutUserPolicy",
+        "iam:AddUserToGroup",
+        "iam:UpdateAssumeRolePolicy"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyOrganizationAndAccountControl",
+      "Effect": "Deny",
+      "Action": [
+        "organizations:*",
+        "account:*",
+        "sso:*",
+        "identitystore:*"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "DenyDisablingSecurityServices",
+      "Effect": "Deny",
+      "Action": [
+        "cloudtrail:StopLogging",
+        "cloudtrail:DeleteTrail",
+        "config:DeleteConfigurationRecorder",
+        "config:StopConfigurationRecorder",
+        "guardduty:DeleteDetector"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
