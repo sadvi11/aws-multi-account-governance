@@ -72,18 +72,25 @@ jobs:
           terraform -chdir=terraform init -backend=false -input=false
           terraform -chdir=terraform validate
 
+      # The policy documents are referenced by Terraform via file() and loaded
+      # directly by the tests. If those diverge, the tested artifact stops
+      # being the deployed artifact.
+      #
+      # Scoped to all of terraform/, not one file. An earlier version checked
+      # only scp.tf, so adding permission-boundary.tf failed the build even
+      # though the policy WAS referenced - the check was right and its scope
+      # was wrong.
       - name: Confirm Terraform and the tests read the same files
         run: |
-          # The policy documents are referenced by Terraform via file() and
-          # loaded directly by the tests. If those ever diverge, the tested
-          # artifact stops being the deployed artifact.
           missing=0
           for f in policies/*.json; do
             name=$(basename "$f")
-            grep -q "$name" terraform/scp.tf || { echo "::error::$name is not referenced by terraform/scp.tf"; missing=1; }
+            grep -rq "$name" terraform/ \
+              || { echo "::error::$name is not referenced anywhere in terraform/"; missing=1; }
           done
-          for name in $(grep -oE '[a-z-]+\.json' terraform/scp.tf | sort -u); do
-            [ -f "policies/$name" ] || { echo "::error::terraform references policies/$name which does not exist"; missing=1; }
+          for name in $(grep -rhoE '[a-z0-9-]+\.json' terraform/ | sort -u); do
+            [ -f "policies/$name" ] \
+              || { echo "::error::terraform references policies/$name which does not exist"; missing=1; }
           done
-          [ "$missing" = "0" ] && echo "every policy file is referenced, and every reference resolves"
+          [ "$missing" = "0" ] && echo "all $(ls policies/*.json | wc -l | tr -d ' ') policy files referenced, and every reference resolves"
           exit $missing
