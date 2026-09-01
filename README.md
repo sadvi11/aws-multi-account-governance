@@ -19,6 +19,31 @@ institutions.
 
 ---
 
+## Well-Architected review
+
+Reviewed against the six pillars of the
+[AWS Well-Architected Framework](https://docs.aws.amazon.com/wellarchitected/latest/framework/the-pillars-of-the-framework.html).
+A landing zone exists almost entirely to serve two of them, so the honest
+version of this table is lopsided — and says so.
+
+| Pillar | Addressed | Where it falls short |
+|---|---|---|
+| **Security** | This is the whole repository. Six Service Control Policies, **five attached at the organisation root** so they are inherited by any OU created later. Root-user actions denied. Accounts cannot leave the organisation. Security services cannot be disabled. Encryption required. A permission boundary caps what the Developer role can ever be granted, so delegated administration cannot escalate. **44 tests** assert the policies deny what they claim. | No SCP can protect a management account from itself. No detective controls here — GuardDuty, Security Hub and Config live in the baseline repository, not this one. |
+| **Operational excellence** | Six OUs by lifecycle — Security, Infrastructure, Workloads-Prod, Workloads-NonProd, Sandbox, Suspended — so an account's controls follow from where it sits rather than from someone remembering. Policies are JSON files version-controlled beside the Terraform that attaches them. | **This repository cannot stand itself up in CI**, and the README says so: creating an AWS Organization needs a real management account. The tests assert policy documents, not deployed behaviour. |
+| **Cost optimization** | `SandboxSpendGuardrails` is the one policy scoped to a single OU rather than the root, restricting expensive services where experiments happen. Per-account quotas mean one runaway workload cannot exhaust another account. | No budgets, no anomaly detection, no cost allocation tag enforcement. Those belong in a landing zone and are absent. |
+| **Reliability** | Account boundaries are the strongest blast radius control AWS offers — stronger than IAM, because an account boundary cannot be misconfigured out of existence. The Suspended OU gives a safe destination for an account being wound down. | Nothing here addresses workload reliability. That is by design, but it means this repository proves nothing about availability. |
+| **Performance efficiency** | Not applicable. A governance layer imposes no data path and adds no latency. | Listing this pillar as addressed would be padding. |
+| **Sustainability** | The Canadian data-residency SCP constrains region choice, which incidentally constrains where compute runs. | **Not a sustainability control.** It is a compliance control with a geographic side effect, and claiming otherwise would be dishonest. |
+
+**The honest summary:** strong on security by construction, adequate on
+operational excellence, and deliberately silent on performance and
+sustainability. The largest real gap is that **the guardrails have never been
+applied to a live organisation** — they are asserted against policy documents,
+not observed denying an action. That is stated in the opening section rather
+than buried here.
+
+---
+
 ## Start here: what is and is not proven
 
 Being explicit, because this is the one repository in my portfolio that
