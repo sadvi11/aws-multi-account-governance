@@ -116,7 +116,7 @@ Root
 Real output from the [latest run](https://github.com/sadvi11/aws-multi-account-governance/actions):
 
 ```console
-$ pytest tests/ -v
+$ pytest tests/ -v   # abridged: 44 tests in total
 test_policies_exist                                    PASSED
 test_policy_has_required_structure[...]                PASSED  (6 policies)
 test_every_statement_has_a_sid[...]                    PASSED
@@ -128,8 +128,9 @@ test_security_services_cannot_be_disabled              PASSED
 test_root_user_is_denied                               PASSED
 test_accounts_cannot_leave_the_organization            PASSED
 test_no_policy_denies_everything_unconditionally       PASSED
+...
 
-31 passed
+44 passed
 ```
 
 ### The one worth reading
@@ -159,8 +160,8 @@ Two faults injected into the policies:
 
 | Fault | Result |
 |---|---|
-| Region deny with global-service exemptions removed | `test_region_restriction_exempts_global_services` **failed**, 30 passed |
-| `cloudtrail:StopLogging` removed from the protection policy | `test_security_services_cannot_be_disabled` **failed**, 30 passed |
+| Region deny with global-service exemptions removed | `test_region_restriction_exempts_global_services` **failed**, 43 passed |
+| `cloudtrail:StopLogging` removed from the protection policy | `test_security_services_cannot_be_disabled` **failed**, 43 passed |
 
 Each fault failed exactly its own test and nothing else. **A check that cannot
 fail is worse than no check**, because it produces confidence without coverage.
