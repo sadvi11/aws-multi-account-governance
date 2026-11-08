@@ -98,6 +98,25 @@ Root
 └── Suspended           pending closure. denied everything except data extraction
 ```
 
+```mermaid
+flowchart TB
+    subgraph Org["AWS Organization (management account)"]
+        Root["Root<br/>5 SCPs attached here"]
+        Root --> Sec[Security]
+        Root --> Infra[Infrastructure]
+        Root --> Prod[Workloads-Prod]
+        Root --> NonProd[Workloads-NonProd]
+        Root --> Sbx["Sandbox<br/>+ SandboxSpendGuardrails"]
+        Root --> Susp[Suspended]
+    end
+    Repo["policies/*.json"] -->|"file() in Terraform"| Root
+    Repo -->|"loaded by pytest"| CI["CI: pytest + terraform validate"]
+```
+
+The same JSON files feed both Terraform and the tests, so what is tested is
+what is deployed. Five policies attach at the root; the sixth attaches only to
+the Sandbox OU.
+
 ## The six guardrails
 
 | Policy | What it prevents |
@@ -116,7 +135,7 @@ Root
 Real output from the [latest run](https://github.com/sadvi11/aws-multi-account-governance/actions):
 
 ```console
-$ pytest tests/ -v
+$ pytest tests/ -v   # abridged: 44 tests in total
 test_policies_exist                                    PASSED
 test_policy_has_required_structure[...]                PASSED  (6 policies)
 test_every_statement_has_a_sid[...]                    PASSED
@@ -128,8 +147,9 @@ test_security_services_cannot_be_disabled              PASSED
 test_root_user_is_denied                               PASSED
 test_accounts_cannot_leave_the_organization            PASSED
 test_no_policy_denies_everything_unconditionally       PASSED
+...
 
-31 passed
+44 passed
 ```
 
 ### The one worth reading
@@ -159,8 +179,8 @@ Two faults injected into the policies:
 
 | Fault | Result |
 |---|---|
-| Region deny with global-service exemptions removed | `test_region_restriction_exempts_global_services` **failed**, 30 passed |
-| `cloudtrail:StopLogging` removed from the protection policy | `test_security_services_cannot_be_disabled` **failed**, 30 passed |
+| Region deny with global-service exemptions removed | `test_region_restriction_exempts_global_services` **failed**, 43 passed |
+| `cloudtrail:StopLogging` removed from the protection policy | `test_security_services_cannot_be_disabled` **failed**, 43 passed |
 
 Each fault failed exactly its own test and nothing else. **A check that cannot
 fail is worse than no check**, because it produces confidence without coverage.
@@ -253,6 +273,38 @@ terraform -chdir=terraform validate               # configuration correctness
 
 Applying it needs an AWS management account with Organizations enabled. The
 service itself is free; the accounts are what require billing setup.
+
+## What I'd change for production
+
+This is a reference design that has not been applied to a live organisation, so
+these are gaps I would close before relying on it, not things already done:
+
+- **Roll SCPs out gradually.** Attach a new policy to a test OU first and watch
+  CloudTrail for denied calls before attaching at the root. A root-level deny
+  that is wrong affects every member account at once.
+- **Add a break-glass path.** The root-user deny and the region deny have no
+  carve-out for an emergency role. A production version needs a documented,
+  alarmed exception, for example a condition on a named admin role ARN.
+- **Account vending.** Use Control Tower or Account Factory for Terraform rather
+  than creating accounts by hand.
+- **Identity.** Add IAM Identity Center so people sign in through permission
+  sets instead of long-lived IAM users.
+- **Remote state.** Store Terraform state in a versioned, encrypted S3 bucket
+  with locking; the management account state describes the whole organisation.
+- **Detective controls.** Pair the preventive SCPs with organisation-wide
+  CloudTrail, Config and GuardDuty (the baseline repository covers these).
+
+## Teardown and cost
+
+- **Cost.** AWS Organizations and SCPs have no additional charge; you pay for
+  the resources in the member accounts. See the
+  [Organizations pricing page](https://aws.amazon.com/organizations/pricing/).
+- **Teardown.** `terraform destroy` against an organisation is not a casual
+  operation. AWS requires member accounts to be removed or closed before an
+  organisation can be deleted; read
+  [Deleting an organization](https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_org_delete.html)
+  first. Detaching a policy and removing an OU are reversible; closing an
+  account is not.
 
 ## Honest limits
 
